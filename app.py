@@ -9,6 +9,7 @@ from ahledger import decode, normalize_ahl1
 from local_store import load_market, read_vendors, save_vendors, VENDOR_PATH
 from vendor_import import import_npcs, merge_catalog, parse_addon_csv
 from kaydee_import import import_forever_addon
+from faction_filter import filter_vendors, faction_counts
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -154,15 +155,19 @@ if market is None:
 
 st.divider()
 st.header("5 · Vendor catalog workbench")
+faction_choice = st.radio("Vendor faction", ["Alliance", "Horde", "All"], horizontal=True, key="vendor_faction")
+visible_vendors = filter_vendors(vendors, faction_choice)
+counts = faction_counts(vendors)
+st.caption(f"Showing {len(visible_vendors):,} of {len(vendors):,} vendor listings. Shared (AH) vendors appear for both factions; unknown-faction imports appear only under All. ({counts['unknown']:,} unknown.)")
 st.write("Edit your local NPC catalog. Click Save changes to persist edits between sessions. A verified flag means you confirmed the NPC purchase price on Forever.")
-stats=catalog_stats(vendors)
+stats=catalog_stats(visible_vendors)
 c1,c2,c3=st.columns(3)
 c1.metric("Vendor entries",stats["rows"])
 c2.metric("Unique item IDs",stats["unique_items"])
 c3.metric("Verified entries",stats["verified"])
 catalog_cols=["item_id","item_name","vendor_name","vendor_location","vendor_buy_copper","vendor_sellback_copper","stock","verified","source_url","checked_at","notes"]
 st.caption("One row per item below. Select an item to inspect and edit all its vendor listings; the underlying vendor records are preserved.")
-summary = (vendors.groupby("item_id", sort=False, dropna=False)
+summary = (visible_vendors.groupby("item_id", sort=False, dropna=False)
     .agg(item_name=("item_name","first"),
          vendor_count=("item_id","size"),
          min_buy_copper=("vendor_buy_copper","min"),
@@ -179,9 +184,9 @@ st.dataframe(summary.rename(columns={"item_id":"Item ID","item_name":"Item",
 if not summary.empty:
     options = summary["item_id"].tolist()
     selected_id = st.selectbox("Inspect / edit item vendors",
-        options, format_func=lambda item_id: f"{vendors.loc[vendors.item_id == item_id, 'item_name'].iloc[0]} (ID {item_id})",
+        options, format_func=lambda item_id: f"{visible_vendors.loc[visible_vendors.item_id == item_id, 'item_name'].iloc[0]} (ID {item_id})",
         key="selected_vendor_item")
-    selected_rows = vendors[vendors["item_id"] == selected_id].copy()
+    selected_rows = visible_vendors[visible_vendors["item_id"] == selected_id].copy()
     editor = selected_rows[catalog_cols].copy()
     editor["checked_at"] = editor["checked_at"].astype(str).replace("NaT","")
     edited = st.data_editor(editor, num_rows="dynamic", use_container_width=True,
@@ -191,8 +196,17 @@ if not summary.empty:
         checked["checked_at"] = checked["checked_at"].dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
         if st.button("Save changes for selected item"):
             try:
-                # Only replace the selected item's vendor records; do not discard other items.
-                other = vendors[vendors["item_id"] != selected_id].copy()
+                # Preserve faction/NPC metadata on edited records and avoid
+                # overwriting vendors hidden by the selected faction filter.
+                extra_cols = [col for col in vendors.columns if col not in checked.columns]
+                if extra_cols:
+                    original = selected_rows.drop_duplicates(["item_id", "vendor_name"])
+                    checked = checked.merge(original[["item_id", "vendor_name"] + extra_cols],
+                                            on=["item_id", "vendor_name"], how="left")
+                original_keys = selected_rows[["item_id", "vendor_name"]].drop_duplicates()
+                other = vendors.merge(original_keys.assign(_remove=True),
+                                      on=["item_id", "vendor_name"], how="left")
+                other = other[other["_remove"].isna()].drop(columns=["_remove"])
                 updated = pd.concat([other, checked], ignore_index=True)
                 save_vendors(updated)
                 st.success(f"Saved {len(checked)} vendor listings for item {selected_id}.")
@@ -209,7 +223,7 @@ with st.expander("Required CSV columns and meaning"):
     st.code("vendors: item_id,item_name,vendor_name,vendor_location,vendor_buy_copper,vendor_sellback_copper,stock,verified\nmarket: item_id,ah_buyout_copper,market_price_copper,daily_sales,competing_units,scan_age_hours")
     st.write("Vendor cost means **NPC purchase price**, never NPC sellback value. Unknown stock may be left blank. Set verified=true only for Forever-confirmed vendor prices.")
 try:
-    result = compute(vendors, market, days, cut, deposit, discount, max_units, int(capital*10000), max_age)
+    result = compute(visible_vendors, market, days, cut, deposit, discount, max_units, int(capital*10000), max_age)
 except Exception as exc:
     st.error(f"Data validation error: {exc}")
     st.stop()
@@ -294,11 +308,11 @@ window = st.selectbox("Comparison window",options=[1,2,3,5,7],format_func=lambda
 history = pd.read_csv(history_upload) if history_upload else (pd.read_csv("sample_history.csv") if demo_history else None)
 if history is not None:
     try:
-        trends = analyze_trends(history,vendors,window_days=window,fee=cut)
+        trends = analyze_trends(history,visible_vendors,window_days=window,fee=cut)
         if trends.empty:
             st.warning("Insufficient history for this comparison. You need observations in both windows.")
         else:
-            trends = trends.merge(vendors[["item_id","item_name"]].assign(item_id=lambda x:x.item_id.astype(str)),on="item_id",how="left")
+            trends = trends.merge(visible_vendors[["item_id","item_name"]].drop_duplicates("item_id").assign(item_id=lambda x:x.item_id.astype(str)),on="item_id",how="left")
             display = pd.DataFrame({
                 "Item":trends["item_name"].fillna(trends["item_id"]),
                 "Demand change (%)":trends["demand_change_pct"].round(1),
