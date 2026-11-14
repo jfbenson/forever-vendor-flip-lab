@@ -8,6 +8,7 @@ from catalog import validate_catalog, catalog_stats
 from ahledger import decode, normalize_ahl1
 from local_store import load_market, read_vendors, save_vendors, VENDOR_PATH
 from vendor_import import import_npcs, merge_catalog, parse_addon_csv
+from kaydee_import import import_forever_addon
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -72,6 +73,24 @@ if vendors is None:
         vendors = read_vendors()
     except Exception as exc:
         st.error(f"Cannot read saved vendor catalog: {exc}")
+st.subheader("Import built-in WoW Forever vendor database")
+st.caption("Import the bundled Data_Forever.lua from your local Kaydee addon ZIP. No visits or /kvid export required. Data stays on your PC.")
+kaydee_zip = st.file_uploader("Kaydee addon ZIP (contains Data_Forever.lua)", type=["zip"], key="kaydee_zip")
+if kaydee_zip is not None and st.button("Import Forever vendor database"):
+    import tempfile
+    from pathlib import Path
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive_path = Path(tmp) / "KaydeesVID.zip"
+            archive_path.write_bytes(kaydee_zip.getvalue())
+            incoming = import_forever_addon(archive_path)
+        merged = merge_catalog(vendors, incoming)
+        save_vendors(merged)
+        st.success(f"Imported {len(incoming):,} Forever vendor listings; saved {len(merged):,} catalog entries.")
+        st.rerun()
+    except Exception as exc:
+        st.error(f"Kaydee import failed: {exc}")
+
 st.subheader("Import vendor prices")
 with st.expander("Classic vendor database / addon CSV", expanded=vendors is None):
     st.caption("WoWDB Classic prices are reference estimates, NOT verified Forever prices. Only copper-priced items are imported.")
