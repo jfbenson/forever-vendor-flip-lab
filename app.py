@@ -161,21 +161,48 @@ c1.metric("Vendor entries",stats["rows"])
 c2.metric("Unique item IDs",stats["unique_items"])
 c3.metric("Verified entries",stats["verified"])
 catalog_cols=["item_id","item_name","vendor_name","vendor_location","vendor_buy_copper","vendor_sellback_copper","stock","verified","source_url","checked_at","notes"]
-editor=vendors[catalog_cols].copy()
-editor["checked_at"]=editor["checked_at"].astype(str).replace("NaT","")
-edited=st.data_editor(editor,num_rows="dynamic",use_container_width=True,hide_index=True,key="vendor_editor")
-try:
-    checked=validate_catalog(edited)
-    checked["checked_at"]=checked["checked_at"].dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
-    if st.button("Save vendor changes locally"):
-        try:
-            save_vendors(checked)
-            st.success(f"Saved {len(checked)} vendor records to {VENDOR_PATH}.")
-        except Exception as exc:
-            st.error(f"Save failed: {exc}")
-    st.download_button("Download vendor backup CSV",checked.to_csv(index=False),file_name="vendors_verified.csv",mime="text/csv")
-except ValueError as exc:
-    st.warning(f"Fix catalog entries before exporting: {exc}")
+st.caption("One row per item below. Select an item to inspect and edit all its vendor listings; the underlying vendor records are preserved.")
+summary = (vendors.groupby("item_id", sort=False, dropna=False)
+    .agg(item_name=("item_name","first"),
+         vendor_count=("item_id","size"),
+         min_buy_copper=("vendor_buy_copper","min"),
+         max_buy_copper=("vendor_buy_copper","max"),
+         verified_vendors=("verified","sum")).reset_index())
+search_items = st.text_input("Search item name or ID", key="catalog_item_search")
+if search_items:
+    summary = summary[summary["item_name"].str.contains(search_items, case=False, regex=False, na=False)
+                      | summary["item_id"].str.contains(search_items, case=False, regex=False, na=False)]
+st.dataframe(summary.rename(columns={"item_id":"Item ID","item_name":"Item",
+    "vendor_count":"Vendors","min_buy_copper":"Lowest NPC price (copper)",
+    "max_buy_copper":"Highest NPC price (copper)","verified_vendors":"Verified vendors"}),
+    hide_index=True, use_container_width=True)
+if not summary.empty:
+    options = summary["item_id"].tolist()
+    selected_id = st.selectbox("Inspect / edit item vendors",
+        options, format_func=lambda item_id: f"{vendors.loc[vendors.item_id == item_id, 'item_name'].iloc[0]} (ID {item_id})",
+        key="selected_vendor_item")
+    selected_rows = vendors[vendors["item_id"] == selected_id].copy()
+    editor = selected_rows[catalog_cols].copy()
+    editor["checked_at"] = editor["checked_at"].astype(str).replace("NaT","")
+    edited = st.data_editor(editor, num_rows="dynamic", use_container_width=True,
+        hide_index=True, key=f"vendor_editor_{selected_id}")
+    try:
+        checked = validate_catalog(edited)
+        checked["checked_at"] = checked["checked_at"].dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
+        if st.button("Save changes for selected item"):
+            try:
+                # Only replace the selected item's vendor records; do not discard other items.
+                other = vendors[vendors["item_id"] != selected_id].copy()
+                updated = pd.concat([other, checked], ignore_index=True)
+                save_vendors(updated)
+                st.success(f"Saved {len(checked)} vendor listings for item {selected_id}.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Save failed: {exc}")
+    except ValueError as exc:
+        st.warning(f"Fix catalog entries before saving: {exc}")
+st.download_button("Download complete vendor backup CSV", vendors.to_csv(index=False),
+    file_name="vendors_verified.csv", mime="text/csv")
 st.caption("Vendor prices must be the cost to BUY from an NPC, not the NPC sellback value. Sample catalog entries are fictional.")
 
 with st.expander("Required CSV columns and meaning"):
