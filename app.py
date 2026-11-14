@@ -101,6 +101,32 @@ except ValueError as exc:
 if market is None:
     st.stop()
 
+st.divider()
+st.header("5 · Vendor catalog workbench")
+st.write("Edit your local NPC catalog. Click Save changes to persist edits between sessions. A verified flag means you confirmed the NPC purchase price on Forever.")
+stats=catalog_stats(vendors)
+c1,c2,c3=st.columns(3)
+c1.metric("Vendor entries",stats["rows"])
+c2.metric("Unique item IDs",stats["unique_items"])
+c3.metric("Verified entries",stats["verified"])
+catalog_cols=["item_id","item_name","vendor_name","vendor_location","vendor_buy_copper","vendor_sellback_copper","stock","verified","source_url","checked_at","notes"]
+editor=vendors[catalog_cols].copy()
+editor["checked_at"]=editor["checked_at"].astype(str).replace("NaT","")
+edited=st.data_editor(editor,num_rows="dynamic",use_container_width=True,hide_index=True,key="vendor_editor")
+try:
+    checked=validate_catalog(edited)
+    checked["checked_at"]=checked["checked_at"].dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
+    if st.button("Save vendor changes locally"):
+        try:
+            save_vendors(checked)
+            st.success(f"Saved {len(checked)} vendor records to {VENDOR_PATH}.")
+        except Exception as exc:
+            st.error(f"Save failed: {exc}")
+    st.download_button("Download vendor backup CSV",checked.to_csv(index=False),file_name="vendors_verified.csv",mime="text/csv")
+except ValueError as exc:
+    st.warning(f"Fix catalog entries before exporting: {exc}")
+st.caption("Vendor prices must be the cost to BUY from an NPC, not the NPC sellback value. Sample catalog entries are fictional.")
+
 with st.expander("Required CSV columns and meaning"):
     st.code("vendors: item_id,item_name,vendor_name,vendor_location,vendor_buy_copper,vendor_sellback_copper,stock,verified\nmarket: item_id,ah_buyout_copper,market_price_copper,daily_sales,competing_units,scan_age_hours")
     st.write("Vendor cost means **NPC purchase price**, never NPC sellback value. Unknown stock may be left blank. Set verified=true only for Forever-confirmed vendor prices.")
@@ -220,28 +246,3 @@ if history is not None:
 else:
     st.info("Upload a historical CSV with timestamp,item_id,ah_buyout_copper,daily_sales,competing_units.")
 
-st.divider()
-st.header("5 · Vendor catalog workbench")
-st.write("Edit your local NPC catalog. Click Save changes to persist edits between sessions. A verified flag means you confirmed the NPC purchase price on Forever.")
-stats=catalog_stats(vendors)
-c1,c2,c3=st.columns(3)
-c1.metric("Vendor entries",stats["rows"])
-c2.metric("Unique item IDs",stats["unique_items"])
-c3.metric("Verified entries",stats["verified"])
-catalog_cols=["item_id","item_name","vendor_name","vendor_location","vendor_buy_copper","vendor_sellback_copper","stock","verified","source_url","checked_at","notes"]
-editor=vendors[catalog_cols].copy()
-editor["checked_at"]=editor["checked_at"].astype(str).replace("NaT","")
-edited=st.data_editor(editor,num_rows="dynamic",use_container_width=True,hide_index=True,key="vendor_editor")
-try:
-    checked=validate_catalog(edited)
-    checked["checked_at"]=checked["checked_at"].dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
-    if st.button("Save vendor changes locally"):
-        try:
-            save_vendors(checked)
-            st.success(f"Saved {len(checked)} vendor records to {VENDOR_PATH}.")
-        except Exception as exc:
-            st.error(f"Save failed: {exc}")
-    st.download_button("Download vendor backup CSV",checked.to_csv(index=False),file_name="vendors_verified.csv",mime="text/csv")
-except ValueError as exc:
-    st.warning(f"Fix catalog entries before exporting: {exc}")
-st.caption("Vendor prices must be the cost to BUY from an NPC, not the NPC sellback value. Sample catalog entries are fictional.")
