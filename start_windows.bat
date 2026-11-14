@@ -1,31 +1,29 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-
-echo === Updating Forever Vendor Flip Lab ===
-git pull --ff-only
-if errorlevel 1 (
-    echo Git update failed. App not launched.
-    pause
-    exit /b 1
-)
-
 echo.
-echo === Running tests ===
-call "%~dp0test_windows.bat"
-if errorlevel 1 (
-    echo Tests failed. App not launched.
-    pause
-    exit /b 1
-)
-
+echo ==================================
+echo   Forever Vendor Flip Lab
+echo ==================================
 echo.
-echo === Starting app ===
 where py >nul 2>&1
 if not errorlevel 1 (
     py -3 launch.py
 ) else (
+    where python >nul 2>&1
+    if errorlevel 1 (
+        echo Python was not found.
+        echo Install Python 3.11 or 3.12 from https://www.python.org/downloads/
+        echo Then reopen this file.
+        pause
+        exit /b 1
+    )
     python launch.py
 )
-if errorlevel 1 pause
-exit /b %ERRORLEVEL%
+if errorlevel 1 (
+    echo.
+    echo The app could not start. See the error above.
+    pause
+    exit /b 1
+)
+exit /b 0
