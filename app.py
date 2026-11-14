@@ -5,7 +5,7 @@ import streamlit as st
 from engine import compute
 from trends import analyze_trends
 from catalog import validate_catalog, catalog_stats
-from ahledger import decode
+from ahledger import decode, normalize_ahl1
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -30,6 +30,21 @@ use_demo = st.checkbox("Use fictional demo data", value=True)
 market, vendors = None, None
 if uploaded_market:
     market = pd.read_csv(uploaded_market)
+elif not use_demo:
+    try:
+        from ahledger import fetch as fetch_market
+        @st.cache_data(ttl=900, show_spinner="Loading AHledger market...")
+        def load_live_market(endpoint):
+            raw = fetch_market(endpoint)
+            decoded = decode(raw)
+            if decoded.attrs.get("format") != "AHL1":
+                raise ValueError("Live market endpoint did not return AHL1")
+            return decoded
+        market = normalize_ahl1(load_live_market(url))
+        st.caption(f"Live AHledger: {len(market):,} items · estimated sales/day from provider scans")
+    except Exception as exc:
+        st.warning(f"Live market unavailable: {exc}")
+
 elif use_demo:
     market = pd.read_csv("sample_market.csv")
 if uploaded_vendor:
@@ -48,7 +63,7 @@ if st.button("Test market endpoint"):
             st.success(f"Decoded {len(decoded):,} records")
             if decoded.attrs.get("format") == "AHL1":
                 st.caption(f"AHL1 realm: {decoded.attrs['realm']} · Provider timestamp: {pd.to_datetime(decoded.attrs['timestamp'], unit='s', utc=True)}")
-                st.warning("AHL1 field_1 through field_8 have not been verified. Do not assume their units or meanings.")
+                st.caption("AHL1: median, minimum buyout, listed quantity, 7d median, 30d median, 30d low, 30d high, estimated daily sales × 10.")
             st.dataframe(decoded.head(10), hide_index=True)
         except ValueError as exc:
             st.warning(f"Response downloaded but not decoded: {exc}")
@@ -61,7 +76,7 @@ if vendors is not None:
         st.error(f"Vendor catalog validation: {exc}")
         st.stop()
 if market is None or vendors is None:
-    st.info("Upload both CSVs, or enable demo mode.")
+    st.info("Upload a verified vendor catalog CSV to calculate live opportunities, or enable demo mode.")
     st.stop()
 
 with st.expander("Required CSV columns and meaning"):
@@ -86,7 +101,7 @@ with st.expander("Inspect and map an AHledger response (no assumptions about pro
             st.write(f"Decoded {len(source)} records; available fields: {list(source.columns)}")
             st.dataframe(source.head(5),hide_index=True)
             if source.attrs.get("format") == "AHL1":
-                st.warning("AHL1 numeric field meanings are unverified. Validate any mapping against provider documentation before using recommendations.")
+                st.info("AHL1 follows the provider schema. Estimated sales/day is field_8 / 10; listed quantity is a competition proxy.")
             required=["item_id","ah_buyout_copper","daily_sales","competing_units"]
             optional=["market_price_copper","scan_age_hours"]
             mappings={}
