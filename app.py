@@ -5,6 +5,7 @@ import streamlit as st
 from engine import compute
 from trends import analyze_trends
 from catalog import validate_catalog, catalog_stats
+from ahledger import decode
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -42,6 +43,15 @@ if st.button("Test market endpoint"):
         st.code(response.text[:1000])
         response.raise_for_status()
         st.download_button("Download raw response", response.content, file_name="ahledger_raw.txt")
+        try:
+            decoded = decode(response.content)
+            st.success(f"Decoded {len(decoded):,} records")
+            if decoded.attrs.get("format") == "AHL1":
+                st.caption(f"AHL1 realm: {decoded.attrs['realm']} · Provider timestamp: {pd.to_datetime(decoded.attrs['timestamp'], unit='s', utc=True)}")
+                st.warning("AHL1 field_1 through field_8 have not been verified. Do not assume their units or meanings.")
+            st.dataframe(decoded.head(10), hide_index=True)
+        except ValueError as exc:
+            st.warning(f"Response downloaded but not decoded: {exc}")
     except requests.RequestException as exc:
         st.error(f"Connection failed: {exc}")
 if vendors is not None:
@@ -75,6 +85,8 @@ with st.expander("Inspect and map an AHledger response (no assumptions about pro
             source=decode(raw_upload.getvalue())
             st.write(f"Decoded {len(source)} records; available fields: {list(source.columns)}")
             st.dataframe(source.head(5),hide_index=True)
+            if source.attrs.get("format") == "AHL1":
+                st.warning("AHL1 numeric field meanings are unverified. Validate any mapping against provider documentation before using recommendations.")
             required=["item_id","ah_buyout_copper","daily_sales","competing_units"]
             optional=["market_price_copper","scan_age_hours"]
             mappings={}
