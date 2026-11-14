@@ -75,6 +75,28 @@ if vendors is None:
         vendors = read_vendors()
     except Exception as exc:
         st.error(f"Cannot read saved vendor catalog: {exc}")
+if vendors is None or vendors.empty:
+    st.warning("Setup step needed: no NPC vendor prices are installed yet. Market prices alone cannot identify vendor flips.")
+    with st.expander("First-time setup: get the vendor database", expanded=True):
+        st.markdown("""
+**Step 1 — Download Kaydee's Vendor Item Database addon.**
+
+Open [Kaydee's Vendor Item Database on CurseForge](https://www.curseforge.com/wow/addons/kaydees-vendor-item-database) and download the addon ZIP. You do **not** need to run WoW or visit NPCs to import its bundled database.
+
+**Step 2 — Find the addon ZIP.**
+
+Keep the downloaded ZIP somewhere convenient (such as Downloads). If you already installed the addon, find its folder under `World of Warcraft/Interface/AddOns/` (your WoW Forever install path may differ). Create a ZIP containing the entire addon folder, including `Data_Forever.lua`. Do not upload just your in-game `/kvid export` text.
+
+**Step 3 — Import it below.**
+
+Click **Browse files** under *Kaydee addon ZIP*, select the ZIP, then click **Import Forever vendor database**. Once imported, your catalog is saved on this computer and you won't need to import it each launch.
+
+If you can't get the addon, you can instead import a vendor CSV in **Data settings**, or add vendor prices manually below.
+""")
+else:
+    with st.expander("How to update or restore the Kaydee vendor database"):
+        st.markdown("Download the latest [Kaydee addon ZIP](https://www.curseforge.com/wow/addons/kaydees-vendor-item-database), upload it below and click **Import Forever vendor database**. Existing verified prices are preserved. No need to visit NPCs or use `/kvid export`.")
+
 st.subheader("Import built-in WoW Forever vendor database")
 st.caption("Import the bundled Data_Forever.lua from your local Kaydee addon ZIP. No visits or /kvid export required. Data stays on your PC.")
 kaydee_zip = st.file_uploader("Kaydee addon ZIP (contains Data_Forever.lua)", type=["zip"], key="kaydee_zip")
@@ -92,6 +114,7 @@ if kaydee_zip is not None and st.button("Import Forever vendor database"):
         st.rerun()
     except Exception as exc:
         st.error(f"Kaydee import failed: {exc}")
+        st.info("Make sure the ZIP contains the entire Kaydee addon folder with Data_Forever.lua. A /kvid export or ZIP of only SavedVariables will not work.")
 
 st.subheader("Import vendor prices")
 with st.expander("Classic vendor database / addon CSV", expanded=vendors is None):
