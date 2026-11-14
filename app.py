@@ -158,6 +158,8 @@ st.header("5 · Vendor catalog workbench")
 faction_choice = st.radio("Vendor faction", ["Alliance", "Horde", "All"], horizontal=True, key="vendor_faction")
 visible_vendors = filter_vendors(vendors, faction_choice)
 counts = faction_counts(vendors)
+if counts["unknown"]:
+    st.warning(f"{counts['unknown']:,} vendor records have no faction metadata. If you imported Kaydee before faction support was added, upload the same Kaydee ZIP again and click Import Forever vendor database to restore factions without losing edits.")
 st.caption(f"Showing {len(visible_vendors):,} of {len(vendors):,} vendor listings. Shared (AH) vendors appear for both factions; unknown-faction imports appear only under All. ({counts['unknown']:,} unknown.)")
 st.write("Edit your local NPC catalog. Click Save changes to persist edits between sessions. A verified flag means you confirmed the NPC purchase price on Forever.")
 stats=catalog_stats(visible_vendors)
