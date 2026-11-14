@@ -6,6 +6,7 @@ from engine import compute
 from trends import analyze_trends
 from catalog import validate_catalog, catalog_stats
 from ahledger import decode, normalize_ahl1
+from local_store import load_market, read_vendors, save_vendors, VENDOR_PATH
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -21,62 +22,83 @@ with st.sidebar:
     max_units = st.slider("Max units per item", 1, 100, 10)
     max_age = st.slider("Max scan age (hours)", 1, 168, 24)
 
-st.subheader("1 · Load market data")
-st.write("Upload normalized market CSV, or try downloading the documented AHledger endpoint. The endpoint's live response schema has not been verified; if it is not CSV with these headers, normalize it before upload.")
-url = st.text_input("Market endpoint", "https://api.ahledger.com/v1/pricetable/forever.normal.alliance.us")
-uploaded_market = st.file_uploader("Market CSV", type="csv", key="market")
-uploaded_vendor = st.file_uploader("Vendor catalog CSV", type="csv", key="vendor")
-use_demo = st.checkbox("Use fictional demo data", value=True)
-market, vendors = None, None
-if uploaded_market:
-    market = pd.read_csv(uploaded_market)
-elif not use_demo:
-    try:
-        from ahledger import fetch as fetch_market
-        @st.cache_data(ttl=900, show_spinner="Loading AHledger market...")
-        def load_live_market(endpoint):
-            raw = fetch_market(endpoint)
-            decoded = decode(raw)
-            if decoded.attrs.get("format") != "AHL1":
-                raise ValueError("Live market endpoint did not return AHL1")
-            return decoded
-        market = normalize_ahl1(load_live_market(url))
-        st.caption(f"Live AHledger: {len(market):,} items · estimated sales/day from provider scans")
-    except Exception as exc:
-        st.warning(f"Live market unavailable: {exc}")
+st.subheader("1 · Market data & local catalog")
+st.caption("Market prices load automatically from AHledger and are saved on this computer. No manual AH scan or CSV download is required.")
+with st.expander("Data settings", expanded=False):
+    url = st.text_input("AHledger endpoint", "https://api.ahledger.com/v1/pricetable/forever.normal.alliance.us")
+    refresh_hours = st.selectbox("Refresh market when provider snapshot is older than", [1, 3, 6, 12, 24], index=2, format_func=lambda h: f"{h} hours")
+    use_demo = st.checkbox("Use fictional demo data", value=False)
+    uploaded_market = st.file_uploader("Optional normalized market CSV override", type="csv", key="market")
+    uploaded_vendor = st.file_uploader("Import vendor catalog CSV", type="csv", key="vendor")
 
+@st.cache_data(ttl=300, show_spinner="Checking local market and AHledger...")
+def cached_market(endpoint, hours):
+    return load_market(endpoint, refresh_hours=hours)
+
+market, vendors = None, None
+if st.button("Refresh market now", type="primary", disabled=use_demo):
+    try:
+        market, status = load_market(url, refresh_hours=refresh_hours, force=True)
+        cached_market.clear()
+        st.success("Market refresh completed.")
+    except Exception as exc:
+        st.error(f"Refresh failed: {exc}")
+if uploaded_market is not None:
+    market = pd.read_csv(uploaded_market)
+    st.info("Using uploaded market override; local AHledger cache is unchanged.")
 elif use_demo:
     market = pd.read_csv("sample_market.csv")
-if uploaded_vendor:
-    vendors = pd.read_csv(uploaded_vendor)
-elif use_demo:
+elif market is None:
+    try:
+        market, status = cached_market(url, refresh_hours)
+    except Exception as exc:
+        st.error(f"Market unavailable: {exc}")
+if market is not None and not use_demo and uploaded_market is None:
+    st.caption(f"{len(market):,} market items · {status['source']} · provider scan: {pd.to_datetime(status['timestamp'], unit='s', utc=True)} · age: {status['age_hours']:.1f} hours")
+    if status.get("warning"):
+        st.warning(f"Using saved market data because refresh failed: {status['warning']}")
+    if status["age_hours"] > max_age:
+        st.warning("The market snapshot exceeds your maximum scan age; recommendations are marked stale.")
+
+if uploaded_vendor is not None:
+    try:
+        vendors = save_vendors(pd.read_csv(uploaded_vendor, dtype={"item_id": str}))
+        st.success(f"Imported and saved {len(vendors)} vendor records to {VENDOR_PATH}.")
+    except Exception as exc:
+        st.error(f"Vendor catalog import failed: {exc}")
+if vendors is None:
+    try:
+        vendors = read_vendors()
+    except Exception as exc:
+        st.error(f"Cannot read saved vendor catalog: {exc}")
+if vendors is None and use_demo:
     vendors = pd.read_csv("sample_vendors.csv")
-if st.button("Test market endpoint"):
-    try:
-        response = requests.get(url, timeout=15, headers={"User-Agent":"ForeverVendorFlipLab/0.1"})
-        st.write(f"HTTP {response.status_code}; content type: {response.headers.get('content-type','unknown')}")
-        st.code(response.text[:1000])
-        response.raise_for_status()
-        st.download_button("Download raw response", response.content, file_name="ahledger_raw.txt")
-        try:
-            decoded = decode(response.content)
-            st.success(f"Decoded {len(decoded):,} records")
-            if decoded.attrs.get("format") == "AHL1":
-                st.caption(f"AHL1 realm: {decoded.attrs['realm']} · Provider timestamp: {pd.to_datetime(decoded.attrs['timestamp'], unit='s', utc=True)}")
-                st.caption("AHL1: median, minimum buyout, listed quantity, 7d median, 30d median, 30d low, 30d high, estimated daily sales × 10.")
-            st.dataframe(decoded.head(10), hide_index=True)
-        except ValueError as exc:
-            st.warning(f"Response downloaded but not decoded: {exc}")
-    except requests.RequestException as exc:
-        st.error(f"Connection failed: {exc}")
-if vendors is not None:
-    try:
-        vendors = validate_catalog(vendors)
-    except ValueError as exc:
-        st.error(f"Vendor catalog validation: {exc}")
-        st.stop()
-if market is None or vendors is None:
-    st.info("Upload a verified vendor catalog CSV to calculate live opportunities, or enable demo mode.")
+if vendors is None:
+    st.info("No local vendor catalog yet. Add your first NPC vendor item below, or import a CSV in Data settings.")
+    st.caption("Vendor purchase prices cannot be inferred from AHledger; enter prices observed in-game. Data is saved locally.")
+    with st.form("first_vendor"):
+        item_id = st.text_input("WoW item ID")
+        item_name = st.text_input("Item name")
+        vendor_name = st.text_input("NPC vendor name")
+        vendor_location = st.text_input("Vendor location")
+        price = st.number_input("NPC purchase price (copper)", min_value=1, value=100)
+        verified = st.checkbox("I verified this NPC price in WoW Forever")
+        if st.form_submit_button("Save first vendor item"):
+            try:
+                frame = pd.DataFrame([{"item_id": item_id, "item_name": item_name,
+                    "vendor_name": vendor_name, "vendor_location": vendor_location,
+                    "vendor_buy_copper": price, "verified": verified}])
+                save_vendors(frame)
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Cannot save vendor: {exc}")
+    st.stop()
+try:
+    vendors = validate_catalog(vendors)
+except ValueError as exc:
+    st.error(f"Vendor catalog validation: {exc}")
+    st.stop()
+if market is None:
     st.stop()
 
 with st.expander("Required CSV columns and meaning"):
@@ -200,7 +222,7 @@ else:
 
 st.divider()
 st.header("5 · Vendor catalog workbench")
-st.write("Edit NPC purchase prices and provenance, then download the catalog. A verified flag means you personally confirmed the NPC buy price on Forever.")
+st.write("Edit your local NPC catalog. Click Save changes to persist edits between sessions. A verified flag means you confirmed the NPC purchase price on Forever.")
 stats=catalog_stats(vendors)
 c1,c2,c3=st.columns(3)
 c1.metric("Vendor entries",stats["rows"])
@@ -213,7 +235,13 @@ edited=st.data_editor(editor,num_rows="dynamic",use_container_width=True,hide_in
 try:
     checked=validate_catalog(edited)
     checked["checked_at"]=checked["checked_at"].dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
-    st.download_button("Download validated vendor catalog",checked.to_csv(index=False),file_name="vendors_verified.csv",mime="text/csv")
+    if st.button("Save vendor changes locally"):
+        try:
+            save_vendors(checked)
+            st.success(f"Saved {len(checked)} vendor records to {VENDOR_PATH}.")
+        except Exception as exc:
+            st.error(f"Save failed: {exc}")
+    st.download_button("Download vendor backup CSV",checked.to_csv(index=False),file_name="vendors_verified.csv",mime="text/csv")
 except ValueError as exc:
     st.warning(f"Fix catalog entries before exporting: {exc}")
 st.caption("Vendor prices must be the cost to BUY from an NPC, not the NPC sellback value. Sample catalog entries are fictional.")
