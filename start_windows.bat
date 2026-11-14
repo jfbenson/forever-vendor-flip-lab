@@ -1,15 +1,31 @@
 @echo off
+setlocal
 cd /d "%~dp0"
+
+echo === Updating Forever Vendor Flip Lab ===
+git pull --ff-only
+if errorlevel 1 (
+    echo Git update failed. App not launched.
+    pause
+    exit /b 1
+)
+
+echo.
+echo === Running tests ===
+call "%~dp0test_windows.bat"
+if errorlevel 1 (
+    echo Tests failed. App not launched.
+    pause
+    exit /b 1
+)
+
+echo.
+echo === Starting app ===
 where py >nul 2>&1
-if %errorlevel%==0 (
-  py -3 launch.py
+if not errorlevel 1 (
+    py -3 launch.py
 ) else (
-  where python >nul 2>&1
-  if %errorlevel%==0 (
     python launch.py
-  ) else (
-    echo Python 3.10+ not found. Install Python from https://www.python.org/downloads/
-    echo During installation, enable "Add python.exe to PATH".
-  )
 )
 if errorlevel 1 pause
+exit /b %ERRORLEVEL%
