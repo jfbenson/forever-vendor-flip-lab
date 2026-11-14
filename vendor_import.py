@@ -66,14 +66,32 @@ def import_npcs(npc_ids, session=None, pause=0.2, max_pages=20):
     return pd.DataFrame(rows, columns=COLUMNS)
 
 def merge_catalog(existing, incoming):
-    """Preserve user-confirmed records; import distinct vendor/item combinations."""
+    """Keep existing user edits, but restore missing metadata from imports.
+
+    In particular, older workbench saves dropped the Kaydee faction and NPC
+    identifiers. Reimporting the addon should recover these fields without
+    overwriting confirmed prices or other edits.
+    """
     if existing is None or existing.empty:
         return incoming.copy()
-    combined = pd.concat([existing, incoming], ignore_index=True)
-    combined["_priority"] = combined["verified"].fillna(False).astype(bool).astype(int)
-    combined = combined.sort_values("_priority", ascending=False)
-    combined = combined.drop_duplicates(["item_id", "vendor_name"], keep="first")
-    return combined.drop(columns=["_priority"]).reset_index(drop=True)
+    old = existing.copy()
+    new = incoming.copy()
+    keys = ["item_id", "vendor_name"]
+    old["item_id"] = old["item_id"].astype(str)
+    new["item_id"] = new["item_id"].astype(str)
+    # Enrich existing rows, keeping their prices and verified flags.
+    metadata = ["faction", "npc_id", "limited_stock"]
+    lookup = new.drop_duplicates(keys).set_index(keys)
+    indexed = old.set_index(keys)
+    for col in metadata:
+        if col not in indexed:
+            indexed[col] = None
+        if col in lookup:
+            indexed[col] = indexed[col].combine_first(lookup[col])
+    old = indexed.reset_index()
+    existing_keys = pd.MultiIndex.from_frame(old[keys])
+    additions = new[~pd.MultiIndex.from_frame(new[keys]).isin(existing_keys)]
+    return pd.concat([old, additions], ignore_index=True)
 
 def parse_addon_csv(file):
     """Explicit CSV bridge; no unverified assumptions about /kvid export format."""
