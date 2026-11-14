@@ -6,7 +6,7 @@ A local dashboard for finding NPC vendor-to-Auction-House flips in **WoW Forever
 
 ## Start here (Windows — easiest)
 
-1. Install **Python 3.11 or 3.12** from https://www.python.org/downloads/ if you don't already have it. During setup, select **Add Python to PATH** when available.
+1. Double-click the launcher after extracting the ZIP. **If Python is missing**, it offers to open https://www.python.org/downloads/ and explains how to install it. Python 3.11 or 3.12 is recommended.
 2. On this GitHub repository page, choose **Code → Download ZIP**. Extract the ZIP to a normal folder (for example, Documents). **Do not run files from inside the ZIP.**
 3. Double-click **`start_windows.bat`**.
 4. Wait while it installs Python packages the first time. A browser window should open; otherwise visit **http://localhost:8501**.
@@ -27,9 +27,9 @@ Or on any platform: `python launch.py` (often `python3 launch.py` on macOS/Linux
 
 ## Load vendor prices (recommended)
 
-The first time you launch, the vendor catalog may be empty. To populate it:
+The first time you launch, the dashboard shows an **interactive first-time setup guide** if the vendor catalog is empty. To populate it:
 
-1. Install Kaydee's Vendor Item Database addon in WoW Forever, or obtain your own copy of its addon ZIP.
+1. Download [Kaydee's Vendor Item Database addon](https://www.curseforge.com/wow/addons/kaydees-vendor-item-database) ZIP. You do not need to install it into WoW just to import its built-in data. If you already installed it, ZIP the addon folder containing `Data_Forever.lua`.
 2. In the dashboard, upload the **entire addon ZIP** under **Import built-in WoW Forever vendor database**, then select **Import Forever vendor database**. The ZIP must contain `Data_Forever.lua`.
 3. Select **Alliance**, **Horde**, or **All** in the vendor catalog section. Shared vendors are shown for either faction.
 
