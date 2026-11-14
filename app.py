@@ -10,6 +10,7 @@ from local_store import load_market, read_vendors, save_vendors, VENDOR_PATH
 from vendor_import import import_npcs, merge_catalog, parse_addon_csv
 from kaydee_import import import_forever_addon
 from faction_filter import filter_vendors, faction_counts
+from stock_filter import filter_vendor_stock, stock_category, stock_counts
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -180,7 +181,15 @@ if market is None:
 st.divider()
 st.header("5 · Vendor catalog workbench")
 faction_choice = st.radio("Vendor faction", ["Alliance", "Horde", "All"], horizontal=True, key="vendor_faction")
-visible_vendors = filter_vendors(vendors, faction_choice)
+faction_vendors = filter_vendors(vendors, faction_choice)
+stock_choice = st.selectbox("NPC stock availability",
+    ["All stock types", "Unlimited only", "Limited only", "Unknown only"],
+    help="Unlimited only excludes limited-stock and unknown-stock NPC listings.")
+visible_vendors = filter_vendor_stock(faction_vendors, stock_choice)
+stock_totals = stock_counts(faction_vendors)
+st.caption(f"Within {faction_choice}: {stock_totals['unlimited']:,} unlimited, "
+           f"{stock_totals['limited']:,} limited, {stock_totals['unknown']:,} unknown listings. "
+           "This filter applies to the catalog, rankings, and trends.")
 counts = faction_counts(vendors)
 if counts["unknown"]:
     st.warning(f"{counts['unknown']:,} vendor records have no faction metadata. If you imported Kaydee before faction support was added, upload the same Kaydee ZIP again and click Import Forever vendor database to restore factions without losing edits.")
@@ -192,6 +201,7 @@ c1.metric("Vendor entries",stats["rows"])
 c2.metric("Unique item IDs",stats["unique_items"])
 c3.metric("Verified entries",stats["verified"])
 catalog_cols=["item_id","item_name","vendor_name","vendor_location","vendor_buy_copper","vendor_sellback_copper","stock","verified","source_url","checked_at","notes"]
+st.caption("Unlimited means the vendor listing is explicitly flagged as not limited. Unknown is never assumed unlimited.")
 st.caption("One row per item below. Select an item to inspect and edit all its vendor listings; the underlying vendor records are preserved.")
 summary = (visible_vendors.groupby("item_id", sort=False, dropna=False)
     .agg(item_name=("item_name","first"),
@@ -299,7 +309,7 @@ if only_verified: f = f[f["verified"]]
 st.caption("Click any column heading to sort. List now targets >=80% estimated sell-through per unit; zero means no batch meets that threshold. Expected sales are probabilistic, not guarantees. Weekly EV is modeled, not observed.")
 def gold(s): return (s/10000).round(3)
 show = pd.DataFrame({
-    "Item": f["item_name"], "Vendor": f.get("vendor_name", pd.Series("",index=f.index)),
+    "Item": f["item_name"], "NPC stock type": stock_category(f).str.title(), "Vendor": f.get("vendor_name", pd.Series("",index=f.index)),
     "Vendor cost (g)": gold(f["vendor_buy_copper"]),
     "AH resale (g)": gold(f["resale_copper"]),
     "Profit/unit (g)": gold(f["profit_per_unit_copper"]),
