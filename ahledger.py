@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+from datetime import datetime, timezone
 import requests
 import pandas as pd
 
@@ -85,3 +86,41 @@ def normalize(df, mapping, daily_sales_scale=1.0):
 
 def response_hash(raw):
     return hashlib.sha256(raw).hexdigest()
+
+# Official AHL1 layout: https://ahledger.com/developers
+# The quantity field counts listed units, not auctions. It is a competition proxy.
+AHL1_COLUMNS = ("median_copper", "min_buyout_copper", "listed_quantity",
+                "median_7d_copper", "median_30d_copper", "low_30d_copper",
+                "high_30d_copper", "estimated_sales_per_day_x10")
+
+def normalize_ahl1(frame, now=None):
+    """Convert documented AHL1 columns into the ranking engine's market schema.
+
+    AHledger's sold/day is estimated from scans, not confirmed sales.
+    Listed quantity is used as a proxy for competing units.
+    """
+    if frame.attrs.get("format") != "AHL1":
+        raise ValueError("Expected a decoded AHL1 price table")
+    expected = ["item_id"] + [f"field_{i}" for i in range(1, 9)]
+    if any(c not in frame.columns for c in expected):
+        raise ValueError("Missing AHL1 source columns")
+    result = frame[expected].copy()
+    result.columns = ["item_id"] + list(AHL1_COLUMNS)
+    for col in AHL1_COLUMNS:
+        result[col] = pd.to_numeric(result[col], errors="coerce")
+    result["ah_buyout_copper"] = result["min_buyout_copper"]
+    result["market_price_copper"] = result["median_7d_copper"].where(
+        result["median_7d_copper"] > 0, result["median_copper"])
+    result["daily_sales"] = result["estimated_sales_per_day_x10"] / 10.0
+    result["competing_units"] = result["listed_quantity"]
+    observed = datetime.fromtimestamp(frame.attrs["timestamp"], tz=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    result["scan_age_hours"] = max(0.0, (now - observed).total_seconds() / 3600)
+    result = result.dropna(subset=["item_id", "ah_buyout_copper",
+                                   "daily_sales", "competing_units"])
+    result = result[(result.ah_buyout_copper > 0) &
+                    (result.daily_sales >= 0) &
+                    (result.competing_units >= 0)]
+    return result.reset_index(drop=True)
