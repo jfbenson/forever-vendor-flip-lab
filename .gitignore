@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.sqlite
+*.sqlite3
+market_latest.csv
+raw_responses/
+*.log
+.streamlit/secrets.toml
+.env

@@ -1,0 +1,5 @@
+item_id,item_name,vendor_name,vendor_location,vendor_buy_copper,vendor_sellback_copper,stock,verified
+1001,Example Recipe A,Example Vendor,Example Town,1500,300,10,true
+1002,Example Pattern B,Example Vendor,Example Town,4000,800,3,true
+1003,Example Rare Recipe C,Example Vendor,Example Town,1000,200,1,true
+1004,Example Consumable D,Example Vendor,Example Town,2500,500,100,true

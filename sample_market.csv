@@ -1,0 +1,5 @@
+item_id,item_name,ah_buyout_copper,market_price_copper,daily_sales,competing_units,scan_age_hours
+1001,Example Recipe A,15000,16000,3.2,8,2
+1002,Example Pattern B,40000,50000,0.8,12,3
+1003,Example Rare Recipe C,50000,60000,0.03,4,1
+1004,Example Consumable D,8000,9000,8,25,2

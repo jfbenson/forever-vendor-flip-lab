@@ -1,0 +1,11 @@
+{
+  "_comment": "Example mapping for normalized CSV only. Replace values with actual AHledger response field names after inspecting a response. Do not assume price units.",
+  "mapping": {
+    "item_id": "item_id",
+    "ah_buyout_copper": "ah_buyout_copper",
+    "daily_sales": "daily_sales",
+    "competing_units": "competing_units",
+    "market_price_copper": "market_price_copper"
+  },
+  "daily_sales_scale": 1.0
+}
