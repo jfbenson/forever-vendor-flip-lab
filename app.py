@@ -23,6 +23,7 @@ with st.sidebar:
     deposit = st.number_input("Estimated listing deposit (copper/unit)", min_value=0, value=0, step=10)
     capital = st.number_input("Capital budget (gold)", min_value=1, value=20, step=5)
     max_units = st.slider("Max units per item", 1, 100, 10)
+    st.caption("Listing recommendation targets at least 80% modeled sell-through per unit over the forecast horizon.")
     max_age = st.slider("Max scan age (hours)", 1, 168, 24)
 
 st.subheader("1 · Market data & local catalog")
@@ -272,7 +273,7 @@ only_verified = d.checkbox("Verified vendors only", value=False)
 f = result[(result["profit_per_unit_copper"] >= min_profit*100) & (result["daily_sales"] >= min_sales)]
 if only_fresh: f = f[~f["stale"]]
 if only_verified: f = f[f["verified"]]
-st.caption("Click any column heading to sort. The weekly EV is an approximate modeled return, not observed profit.")
+st.caption("Click any column heading to sort. List now targets >=80% estimated sell-through per unit; zero means no batch meets that threshold. Expected sales are probabilistic, not guarantees. Weekly EV is modeled, not observed.")
 def gold(s): return (s/10000).round(3)
 show = pd.DataFrame({
     "Item": f["item_name"], "Vendor": f.get("vendor_name", pd.Series("",index=f.index)),
@@ -284,7 +285,13 @@ show = pd.DataFrame({
     "Competing units": f["competing_units"],
     "P(sell 1 in horizon)": (100*f["sale_probability"]).round(1),
     "EV one unit (g)": gold(f["ev_one_copper"]),
-    "Buy units": f["units_recommended"],
+    "Buy units (EV model)": f["units_recommended"],
+    "List now (80% target)": f["list_units"],
+    "Expected units sold": f["expected_sold"].round(2),
+    "Expected unsold": f["expected_unsold"].round(2),
+    "Sell-through (%)": f["sellthrough_pct"].round(1),
+    "P(all listed sell) (%)": f["prob_all_sell_pct"].round(1),
+    "Expected lost deposits (g)": gold(f["expected_lost_deposits_copper"]),
     "Weekly EV (g)": gold(f["ev_week_copper"]),
     "Scan age (h)": f["scan_age_hours"],
     "Quality": f["data_quality"],
@@ -295,7 +302,7 @@ m1,m2,m3=st.columns(3)
 m1.metric("Candidate items", len(f))
 m2.metric("Total modeled weekly EV (g)", f["ev_week_copper"].sum().round(0)/10000)
 m3.metric("Suggested purchase spend (g)", (f["units_recommended"]*f["vendor_buy_copper"]).sum().round(0)/10000)
-st.warning("Per-item budget caps are applied independently. Total recommended purchases may exceed your overall budget; this is not yet a portfolio optimizer.")
+st.warning("Per-item budget caps are applied independently. Total recommended purchases may exceed your overall budget; this is not yet a portfolio optimizer. Listing estimates assume static competing inventory and do not include relisting costs.")
 st.subheader("3 · Opportunity overview")
 st.bar_chart(show.set_index("Item")["Weekly EV (g)"])
 st.info("Sale probabilities assume Poisson demand, a demand-confidence discount, and equal competition across listed units. AH listings disappearing are not confirmed sales. Validate with real completed sales before buying in bulk.")
