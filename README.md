@@ -1,79 +1,74 @@
 # Forever Vendor Flip Lab
 
-A local Streamlit dashboard for **WoW Forever / US Normal / Alliance** vendor-to-auction-house opportunities. Works on **Windows, macOS, and Linux**. No Docker, AWS account, or GitHub Actions required.
+A local dashboard for finding NPC vendor-to-Auction-House flips in **WoW Forever**. Includes live AHledger market snapshots, a locally imported Kaydee vendor catalog, faction filtering, profit estimates and conservative listing-size forecasts.
 
-> **Current data status:** The included demo items and historical observations are fictional. The AHledger live API schema and actual Forever vendor purchase prices have **not** been verified. This is a research prototype, not a source of live trade recommendations.
+**Runs on your own computer.** No Git, Docker, cloud account, or programming knowledge required.
 
-## Quick start
+## Start here (Windows — easiest)
 
-**Prerequisite:** Install **Python 3.11 or 3.12** (3.10+ supported). On Windows, download Python from https://www.python.org/downloads/ and enable **Add python.exe to PATH** if offered. An internet connection is needed for first-time package installation.
+1. Install **Python 3.11 or 3.12** from https://www.python.org/downloads/ if you don't already have it. During setup, select **Add Python to PATH** when available.
+2. On this GitHub repository page, choose **Code → Download ZIP**. Extract the ZIP to a normal folder (for example, Documents). **Do not run files from inside the ZIP.**
+3. Double-click **`start_windows.bat`**.
+4. Wait while it installs Python packages the first time. A browser window should open; otherwise visit **http://localhost:8501**.
 
-1. Extract the ZIP to a writable folder (for example `Documents/ForeverFlipLab`). **Don't run directly inside the ZIP.**
-2. Start it:
-   - **Windows:** double-click `start_windows.bat`.
-   - **macOS / Linux:** in a terminal inside the folder, run `sh start_unix.sh`.
-   - **Any OS:** run `python launch.py` (or `python3 launch.py`).
-3. The first launch creates a local `.venv` and installs dependencies automatically. Subsequent launches reuse them.
-4. Open **http://localhost:8501** if your browser doesn't open automatically.
-5. Press **Ctrl+C** in the terminal to stop the server. The app runs only on your machine.
+That's it. Next time, double-click `start_windows.bat` again. The app keeps your vendor catalog and downloaded market data in `local_data/` inside the project folder.
 
-### Optional commands
+**Important:** Windows may hide file extensions; the launcher might display as `start_windows`. You do **not** need Git to run it. An internet connection is needed to install dependencies and fetch current market prices.
 
-```bash
-python launch.py --setup-only     # Install packages without starting the app
-python launch.py --reinstall      # Reinstall packages, then start
+### macOS / Linux
+
+Install Python 3.11 or 3.12, download and extract the ZIP, then run this from the extracted directory:
+
+```sh
+sh start_unix.sh
 ```
 
-On macOS/Linux, substitute `python3` for `python` as needed. The launcher invokes Streamlit through the venv's Python, so manual activation is not required.
+Or on any platform: `python launch.py` (often `python3 launch.py` on macOS/Linux). The launcher creates `.venv` and installs dependencies automatically.
 
-### Troubleshooting
+## Load vendor prices (recommended)
 
-- **Windows says Python is missing:** Install Python 3.11/3.12 and restart the terminal. Try `py -3 --version`.
-- **Windows opens Microsoft Store instead of Python:** Use the Python launcher (`py -3 launch.py`) or disable the Windows app execution aliases for `python.exe` and `python3.exe`.
-- **Packages fail to install:** Check internet access, VPN/proxy settings, and retry with `python launch.py --reinstall`.
-- **Port 8501 is busy:** Stop the previous app instance or run `.venv/Scripts/python.exe -m streamlit run app.py --server.port 8502` on Windows; use `.venv/bin/python` on macOS/Linux.
-- **Antivirus warns about the batch file:** Open `start_windows.bat` in a text editor to inspect it, or use `py -3 launch.py` directly. No administrator rights should be required for normal use.
-- **API test fails:** The public endpoint or response schema may be different from the unverified assumptions. Demo mode still works offline after dependencies are installed.
+The first time you launch, the vendor catalog may be empty. To populate it:
 
-## Real market data
+1. Install Kaydee's Vendor Item Database addon in WoW Forever, or obtain your own copy of its addon ZIP.
+2. In the dashboard, upload the **entire addon ZIP** under **Import built-in WoW Forever vendor database**, then select **Import Forever vendor database**. The ZIP must contain `Data_Forever.lua`.
+3. Select **Alliance**, **Horde**, or **All** in the vendor catalog section. Shared vendors are shown for either faction.
 
-The app accepts a normalized market CSV with required fields:
-`item_id,ah_buyout_copper,daily_sales,competing_units`.
-Optional fields: `market_price_copper,scan_age_hours`.
+The Kaydee addon database is **not redistributed in this repository**. Imported prices are reference data, not personally verified NPC prices. Check stock and requirements in game before buying. If you import again, your existing verified prices are preserved.
 
-For a raw AHledger response, use the **API response mapping workbench** in the app to inspect fields and create a normalized CSV. Alternatively, from a terminal:
-```bash
+## Updating
+
+**If you downloaded a ZIP:** Download a fresh ZIP from GitHub and extract it to a **new folder**. Copy your old `local_data/` folder into the new folder **before launching** to preserve your catalog and cached market data. Do not delete your old folder until you confirm the new version works.
+
+**If you cloned with Git:** Run `update_windows.bat` (Windows) or `git pull --ff-only` (macOS/Linux), then launch normally. The startup script intentionally **does not** run Git or unit tests: it should work for friends who downloaded a ZIP.
+
+Developers can run `test_windows.bat` or `python -m unittest discover -s . -p "test_*.py" -v` to test changes.
+
+## Common problems
+
+- **Python not found:** Install Python 3.11/3.12, restart the terminal or Windows Explorer, and try again. `py -3 --version` should print a version.
+- **Python opens Microsoft Store:** Install Python from python.org and disable Windows Python app execution aliases if necessary.
+- **Package installation fails:** Confirm internet access, then run `python launch.py --reinstall`.
+- **Browser didn't open:** Visit http://localhost:8501 manually. Keep the terminal open while using the app.
+- **Port 8501 in use:** Close an older instance. Advanced users can run `.venv\Scripts\python.exe -m streamlit run app.py --server.port 8502` on Windows.
+- **No vendor listings:** Import the Kaydee ZIP (see above). An AH market download alone does not contain NPC prices.
+- **No Alliance/Horde listings:** Reimport the Kaydee ZIP to restore faction metadata from older catalogs.
+- **No internet:** Previously cached market data may be available; the dashboard warns when snapshots are stale.
+
+## What the numbers mean
+
+Vendor prices are the **cost to buy from the NPC**, in copper (10,000 copper = 1 gold). The app estimates AH sale price after the AH cut, potential profit, modeled demand, competition, and how many units might sell within your selected horizon. The **List now** recommendation uses a modeled 80% per-unit sell-through threshold. These are estimates, not guaranteed sales. Unsold listings can cost deposits and tie up gold. The model does not optimize the total budget across all items.
+
+The dashboard supports a vendor CSV with `item_id,item_name,vendor_buy_copper` and optional `vendor_name,vendor_location,stock,verified,faction` and other metadata. Your catalog edits are saved locally when you click **Save changes**. Back up `local_data/` before replacing the application folder.
+
+## Advanced
+
+```sh
+python launch.py --setup-only
+python launch.py --reinstall
 python sync.py --inspect
-python sync.py --mapping mapping.json
 python sync.py --export history.csv
 ```
-Only run the second command **after** verifying the real field names and price units and editing the mapping. The current API address is a hypothesis, not a verified working integration.
 
-## Vendor catalog
+Market data uses AHledger's WoW Forever / US Normal / Alliance endpoint by default. The faction toggle filters **NPC vendors**, not the AH realm; Horde users should verify whether the selected AH market reflects their own trading environment. Historic trend comparisons require sufficient saved snapshots. Sample CSV files are fictional.
 
-Upload a CSV containing `item_id,item_name,vendor_buy_copper`. Optional columns:
-`vendor_name,vendor_location,vendor_sellback_copper,stock,verified,source_url,checked_at,notes`.
-`vendor_buy_copper` is **what you pay the NPC**, not what the NPC pays you. All prices are copper (10,000 copper = 1 gold). Use the vendor catalog editor to revise records and **download your edits** before closing the app; changes are not autosaved.
-
-## Trends
-
-The dashboard compares 1, 2, 3, 5, or 7-day periods against the immediately preceding equal-length window. A 7-day comparison requires 14 days of history. Upload timestamped `history.csv` in the Momentum section. `collect.py` can append normalized market snapshots to a local SQLite database. Use real observations for actual trends.
-
-## Model limitations
-
-- Profit/unit = conservative resale price after AH cut minus NPC buy price and assumed listing deposit.
-- Expected weekly profit is a **heuristic** based on estimated sales rates and competing listings, not confirmed transactions.
-- The per-item budget cap does **not** enforce a combined portfolio budget.
-- Repeat listing fees, travel, price impact and changing supply are not modeled.
-- All included sample data is fictional, even if sample `verified` flags are true.
-
-## Files
-
-- `launch.py`, `start_windows.bat`, `start_unix.sh`: portable setup and launch
-- `app.py`: Streamlit dashboard
-- `engine.py`, `trends.py`, `catalog.py`: calculations and validation
-- `ahledger.py`, `sync.py`, `collect.py`: API inspection and historical ingestion
-- `sample_*.csv`: fictional examples
-- `requirements.txt`: Python dependencies
-
-Cloud hosting and scheduled AWS collection are intentionally outside this app's scope.
+Source code: https://github.com/jfbenson/forever-vendor-flip-lab
