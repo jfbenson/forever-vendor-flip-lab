@@ -8,3 +8,5 @@ raw_responses/
 *.log
 .streamlit/secrets.toml
 .env
+
+local_data/
