@@ -32,6 +32,30 @@ def decode(raw):
                 if isinstance(obj.get(key),list): return pd.DataFrame(obj[key])
             raise ValueError("JSON object has no recognized row array; inspect the raw response")
         raise ValueError("Unsupported JSON response")
+    if text.startswith("AHL1|"):
+        lines = text.splitlines()
+        header = lines[0].split("|")
+        if len(header) != 4 or header[0] != "AHL1":
+            raise ValueError("Malformed AHL1 header")
+        _, realm, timestamp, declared_count = header
+        if not realm or not timestamp.isdecimal() or not declared_count.isdecimal():
+            raise ValueError("Invalid AHL1 realm, timestamp, or record count")
+        rows = []
+        seen = set()
+        for line_number, line in enumerate(lines[1:], start=2):
+            cells = line.split(":")
+            if len(cells) != 9 or not all(cell.isdecimal() for cell in cells):
+                raise ValueError(f"Malformed AHL1 record at line {line_number}")
+            values = [int(cell) for cell in cells]
+            if values[0] in seen:
+                raise ValueError(f"Duplicate AHL1 item ID at line {line_number}")
+            seen.add(values[0])
+            rows.append(values)
+        if len(rows) != int(declared_count):
+            raise ValueError(f"AHL1 count mismatch: expected {declared_count}, got {len(rows)}")
+        frame = pd.DataFrame(rows, columns=["item_id"] + [f"field_{i}" for i in range(1, 9)])
+        frame.attrs.update(format="AHL1", realm=realm, timestamp=int(timestamp))
+        return frame
     # Try delimited text with header. Unknown formats must fail visibly.
     sample=text[:4096]
     try: dialect=csv.Sniffer().sniff(sample, delimiters=",;\\t|")
