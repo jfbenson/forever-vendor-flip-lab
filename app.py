@@ -7,6 +7,7 @@ from trends import analyze_trends
 from catalog import validate_catalog, catalog_stats
 from ahledger import decode, normalize_ahl1
 from local_store import load_market, read_vendors, save_vendors, VENDOR_PATH
+from vendor_import import import_npcs, merge_catalog, parse_addon_csv
 
 st.set_page_config(page_title="Forever Vendor Flip Lab", layout="wide")
 st.title("⚒️ Forever Vendor Flip Lab")
@@ -71,6 +72,37 @@ if vendors is None:
         vendors = read_vendors()
     except Exception as exc:
         st.error(f"Cannot read saved vendor catalog: {exc}")
+st.subheader("Import vendor prices")
+with st.expander("Classic vendor database / addon CSV", expanded=vendors is None):
+    st.caption("WoWDB Classic prices are reference estimates, NOT verified Forever prices. Only copper-priced items are imported.")
+    npc_text = st.text_input("Classic NPC IDs (comma-separated)", placeholder="e.g. 3090")
+    if st.button("Import these NPCs from WoWDB"):
+        try:
+            npc_ids = [int(x.strip()) for x in npc_text.split(",") if x.strip()]
+            if not npc_ids or len(npc_ids) > 25:
+                raise ValueError("Enter between 1 and 25 NPC IDs.")
+            incoming = import_npcs(npc_ids)
+            if incoming.empty:
+                st.warning("No copper-priced items found for those NPCs.")
+            else:
+                merged = merge_catalog(vendors, incoming)
+                save_vendors(merged)
+                st.success(f"Imported {len(incoming)} vendor listings; saved {len(merged)} catalog entries.")
+                st.rerun()
+        except Exception as exc:
+            st.error(f"WoWDB import failed: {exc}")
+    st.caption("Kaydee's addon: /kvid export provides in-game observations, but its raw text format has not been validated yet.")
+    addon_file = st.file_uploader("Import addon-derived CSV (standard catalog columns)", type=["csv"], key="addon_vendor_csv")
+    if addon_file is not None and st.button("Import addon CSV"):
+        try:
+            incoming = parse_addon_csv(addon_file)
+            merged = merge_catalog(vendors, incoming)
+            save_vendors(merged)
+            st.success(f"Imported {len(incoming)} entries.")
+            st.rerun()
+        except Exception as exc:
+            st.error(str(exc))
+
 if vendors is None and use_demo:
     vendors = pd.read_csv("sample_vendors.csv")
 if vendors is None:
